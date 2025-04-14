@@ -1,0 +1,695 @@
+#!/no/bash # only for colours
+
+#
+# author  : Antonio Macchi
+# license : Public Domain
+# mail    : antonio_macchi@alice.it
+#
+
+
+
+######################################################################
+# terminal escape sequences hardcoded
+#
+# comment out this if-construct to use original tput command
+# anyhow, this should works fine for nearly every terminal
+# moreover, original tput on some terminals fails
+#
+# for example, on an Eterm, this command doesn't work
+#   $ printf "smacs\nacsc\nrmacs" | tput -S
+# while (on an Eterm again) this command works fine
+#   $ printf "smacs\nacsc\nrmacs" | tput -S -T xterm
+# 
+# assumption:
+# every non-linux terminal seems works fine using xterm sequences
+######################################################################
+
+if test "$TERM" == linux; then
+  tput () {
+    case $1 in
+      acsc) echo -n +$'\020'\,$'\021'-$'\030'.$'\031'0$'\333'\`$'\004'a$'\261'f$'\370'g$'\361'h$'\260'i$'\316'j$'\331'k$'\277'l$'\332'm$'\300'n$'\305'o~p$'\304'q$'\304'r$'\304's_t$'\303'u$'\264'v$'\301'w$'\302'x$'\263'y$'\363'z$'\362'\{$'\343'\|$'\330'\}$'\234'~$'\376' ;; # $ printf "%q" `tput acsc -T linux`
+      bold) echo -en "\e[1m" ;;
+      civis) echo -en "\e[?25l\e[?1c" ;;
+      cnorm) echo -en "\e[?25h\e[?0c" ;;
+      cup) echo -en "\e[$(($2 + 1));$(($3 + 1))H" ;;
+      ht) echo -en "\0011" ;;
+      kbs) echo -en "\0177" ;;
+      kcbt) echo -en "\e[Z" ;;
+      kcub1) echo -en "\e[D" ;;
+      kcud1) echo -en "\e[B" ;;
+      kcuf1) echo -en "\e[C" ;;
+      kcuu1) echo -en "\e[A" ;;
+      kend) echo -en "\e[4~" ;;
+      khome) echo -en "\e[1~" ;;
+      knp) echo -en "\e[6~" ;;
+      kpp) echo -en "\e[5~" ;;
+      rmacs) echo -en "\e[10m" ;;
+      rmkx) echo -en "" ;;
+      setab) echo -en "\e[4$2m" ;;
+      setaf) echo -en "\e[3$2m" ;;
+      sgr0) echo -en "\e[0;10m" ;;
+      smacs) echo -en "\e[11m" ;;
+      smkx) echo -en "" ;;
+    esac
+  }
+else
+  tput () {
+    case $1 in
+      acsc) echo -en "``aaffggiijjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~" ;;
+      bold) echo -en "\e[1m" ;;
+      civis) echo -en "\e[?25l" ;;
+      cnorm) echo -en "\e[?12l\e[?25h" ;;
+      cup) echo -en "\e[$(($2 + 1));$(( $3 + 1))H" ;;
+      ht) echo -en "\0011" ;;
+      kbs) echo -en "\0177" ;;
+      kcbt) echo -en "\e[Z" ;;
+      kcub1) echo -en "\eOD" ;;
+      kcud1) echo -en "\eOB" ;;
+      kcuf1) echo -en "\eOC" ;;
+      kcuu1) echo -en "\eOA" ;;
+      kend) echo -en "\e[OF" ;;
+      khome) echo -en "\e[OH" ;;
+      knp) echo -en "\e[6~" ;;
+      kpp) echo -en "\e[5~" ;;
+      rmacs) echo -en "\e(B" ;;
+      rmkx) echo -en "\e[?1l\e>" ;;
+      setab) echo -en "\e[4$2m" ;;
+      setaf) echo -en "\e[3$2m" ;;
+      sgr0) echo -en "\e[m\e(B" ;;
+      smacs) echo -en "\e(0" ;;
+      smkx) echo -en "\e[?1h\e=" ;;
+    esac
+  }
+fi  
+
+
+######################################################################
+
+
+#
+# global variable
+#
+
+unset sd_names
+
+
+#
+# Primary functions
+#
+
+
+sd_start () {
+  # unfortunately, local variables in bash are not completely local as in C
+  # so, to be safe, I'll use sd_ prefix for local variables too.
+  local sd_retval=
+
+  sd_init
+  sd_draw
+  sd_read; sd_retval=$?
+  sd_reset
+  return $sd_retval
+}
+
+
+sd_init () {
+  stty -echo
+  tput civis
+  tput smkx # makes keybord escape sequences consistent for xterm too
+  IFS=$'\n'
+}
+
+
+sd_reset () {
+  IFS=$' \t\n'
+  tput rmkx
+  tput cnorm
+  tput sgr0
+  stty echo
+}
+
+
+sd_draw () {
+  local sd_name= sd_type=
+
+  tput setab 4
+  clear
+
+  for sd_name in ${sd_names[*]}; do
+    eval sd_type=\$sd_${sd_name}_type
+    eval sd_${sd_type}_draw $sd_name
+  done
+}
+
+
+sd_read () {
+  local sd_i=0 sd_max=${#sd_names[*]}
+  local sd_direction=1
+  local sd_name= sd_type= sd_retval=
+
+  while true; do
+    sd_name=${sd_names[$sd_i]}
+    eval sd_type=\$sd_${sd_name}_type
+
+    eval sd_${sd_type}_read $sd_name 2>/dev/null
+    sd_retval=$?
+    case $sd_retval in
+      127) : ;;
+      254) sd_direction=-1 ;;
+      255) sd_direction=1 ;;
+      *) break ;;
+    esac
+
+    ((sd_i += sd_direction))
+    test $sd_i -lt 0 && sd_i=$((sd_max - 1))
+    test $sd_i -gt $sd_max && sd_i=0
+  done
+  return $sd_retval
+}
+
+
+sd_load () {
+  # name, type, x, y
+  # 
+  # canvas    : width, height, caption, shadow, frame
+  # textbox   : width, height, text
+  # inputbox  : width, varname [password]
+  # pushbutton: caption
+  # listbox   : width, height, arrayname, indexname, mark, multi, ilight, ifirst
+
+  local sd_props=( "$@" )
+  local sd_name= sd_prop= sd_propname= sd_propvalue=
+
+  until test ${1%=*} = name; do shift; done
+
+  sd_name=${1#*=}
+  sd_names[${#sd_names[*]}]=$sd_name
+
+  for sd_prop in "${sd_props[@]}"; do
+    sd_propname=${sd_prop%=*}
+    sd_propvalue="${sd_prop#*=}"
+    if test $sd_propname != name; then
+      eval sd_${sd_name}_${sd_propname}=\"\$sd_propvalue\"
+    fi
+  done
+}
+
+sd_load_canvas ()      { sd_load "$@" type=canvas; }
+sd_load_frame ()       { sd_load "$@" type=canvas shadow=no frame=concave; }
+sd_load_textbox ()     { sd_load "$@" type=textbox; }
+sd_load_pushbutton ()  { sd_load "$@" type=pushbutton; }
+sd_load_inputbox ()    { sd_load "$@" type=inputbox; }
+sd_load_passwordbox () { sd_load "$@" type=inputbox password=yes; }
+sd_load_menubox ()     { sd_load "$@" type=listbox; }
+sd_load_checklist ()   { sd_load "$@" type=listbox mark=check multi=yes; }
+sd_load_radiolist ()   { sd_load "$@" type=listbox mark=radio multi=no; }
+
+
+#
+# sd_..._draw  and  sd_..._read  functions
+#
+
+
+sd_canvas_read () {
+  return 127
+}
+
+sd_canvas_draw () {  # $1=name
+  local sd_x= sd_y= sd_width= sd_height= sd_caption=
+  local sd_shadow= sd_frame=
+  local sd_x2= sd_y2= sd_xbefore= sd_xafter= 
+  local sd_color= sd_colorf1= sd_colorf2=
+  local sd_jklmqx=( `sd_get_acsc_jklmqx` )
+  local sd_black="`tput sgr0; tput setab 0`"
+
+  eval sd_x=\${sd_${1}_x:-0}
+  eval sd_y=\${sd_${1}_y:-0}
+  eval sd_width=\${sd_${1}_width:-2}; test $sd_width -lt 2 && sd_width=2
+  eval sd_height=\${sd_${1}_height:-0}
+  eval sd_caption=\"\$sd_${1}_caption\"
+  eval sd_shadow=\${sd_${1}_shadow:-yes}
+  eval sd_frame=\${sd_${1}_frame:-convex}
+
+  sd_x2=$((sd_width - 2))
+  sd_caption="${sd_caption:0:${sd_x2}}"
+  sd_xbefore=$(( (sd_x2 - ${#sd_caption}) / 2 ))
+  sd_xafter=$(( sd_x2 - (sd_xbefore + ${#sd_caption}) ))
+
+  sd_color=`tput sgr0; tput setaf 4; tput bold; tput setab 7`
+  sd_colorf1=`tput sgr0; tput setaf 7; tput bold; tput setab 7; tput smacs`
+  sd_colorf2=`tput sgr0; tput setaf 0; tput setab 7; tput smacs`
+  test $sd_frame = concave && sd_swap sd_colorf1 sd_colorf2
+
+  for (( sd_y2=0; sd_y2 < sd_height; sd_y2++ )); do
+    tput cup $(( sd_y + sd_y2 )) $sd_x
+
+    case $sd_y2 in
+      0)
+	echo -n $sd_colorf1
+	echo -n ${sd_jklmqx[2]}
+	sd_repeat $sd_xbefore ${sd_jklmqx[4]}
+	echo -n $sd_color
+	echo -n "$sd_caption"
+	echo -n $sd_colorf1
+	sd_repeat $sd_xafter ${sd_jklmqx[4]}
+	echo -n $sd_colorf2
+        echo -n ${sd_jklmqx[1]}
+        ;;
+
+      $((sd_height-1)))
+        echo -n $sd_colorf1
+	echo -n ${sd_jklmqx[3]}
+	echo -n $sd_colorf2
+	sd_repeat $sd_x2 ${sd_jklmqx[4]}
+	echo -n ${sd_jklmqx[0]}
+        ;;
+
+      *)
+        echo -n $sd_colorf1
+	echo -n ${sd_jklmqx[5]}
+	echo -n $sd_color
+	printf "%${sd_x2}s"
+	echo -n $sd_colorf2
+	echo -n ${sd_jklmqx[5]} 
+        ;;
+    esac
+
+    if test $sd_shadow = yes -a $sd_y2 -gt 0; then
+      echo -n "$sd_black"
+      echo -n "  "
+    fi
+  done
+  if test $sd_shadow = yes; then
+    echo -n "$sd_black"
+    tput cup $(($sd_y + $sd_height)) $(($sd_x + 2))
+    printf "%${sd_width}s"
+  fi
+}
+
+
+sd_textbox_read ()  {
+  return 127
+}
+
+
+#
+# '\n' = new line
+# more than one space will be collapsed in one
+# words larger than width will be partially lost
+#
+sd_textbox_draw ()  {  # $1=name
+  local sd_x= sd_y= sd_width= sd_height= 
+  local sd_text=
+  local sd_y2= sd_x2= sd_word=
+  
+  eval sd_x=\${sd_${1}_x:-0}
+  eval sd_y=\${sd_${1}_y:-0}
+  eval sd_text=\"\$sd_${1}_text\"
+  eval sd_width=\${sd_${1}_width:-${#sd_text}}
+  eval sd_height=\${sd_${1}_height:-1}
+ 
+  tput sgr0; tput setaf 0; tput setab 7
+
+  while test $1; do shift; done
+  if test "${sd_text// /}"; then
+    sd_text="${sd_text//\\n/ $'\x01' }"
+    set -- ${sd_text// /$'\n'}
+  fi
+
+  sd_nextraw () {
+      printf "%$((sd_width - sd_x2))s" 
+      ((sd_x2=0, sd_y2++))
+      test $sd_y2 -ge $sd_height && return 1
+      tput cup $((sd_y + sd_y2)) $((sd_x + sd_x2))
+      return 0
+  }
+
+  tput cup $sd_y $sd_x
+  sd_y2=0; sd_x2=0
+  while test $1;   do
+    sd_word=${1:0:$sd_width}
+    if test $sd_word = $'\x01'; then
+      sd_nextraw || break
+      shift
+      continue
+    fi
+    test $((${#sd_word} + sd_x2)) -gt $sd_width && ! sd_nextraw && break
+    echo -n "$sd_word"
+    sd_x2=$((sd_x2+${#sd_word}))
+    if test $sd_x2 -lt $sd_width; then
+      echo -n " "
+      ((sd_x2++))
+    fi
+    shift
+  done
+  test $sd_y2 -lt $sd_height && while sd_nextraw; do : ; done
+  unset sd_nextraw
+}
+
+
+#
+# arrow keys, tab, backs etc. will became fixed sequence (\edel, \ehome...)
+#
+sd_pushbutton_read ()  {  # $1=name
+  local sd_c= sd_retval=
+
+  sd_pushbutton_draw $1 selection
+  while true; do
+    tput cnorm; read -sn1 sd_c; tput civis
+    sd_c="`sd_escape_parse \"$sd_c\"`"
+
+    if test -z $sd_c; then
+      eval sd_${1}_push 2>/dev/null
+      sd_retval=$?
+      case $sd_retval in 
+        127 | 254 | 255) : ;;
+        *) break ;;
+      esac
+    fi
+ 
+    case "$sd_c" in
+      $'\e')      sd_retval=27;  break ;;   # escape
+      $'\ekcuf1') sd_retval=255; break ;;   # key cursor forward
+      $'\ekcub1') sd_retval=254; break ;;   # key cursor backward
+      $'\eht')    sd_retval=255; break ;;   # horizontal tab
+      $'\ekcbt')   sd_retval=254; break ;;   # back tab
+    esac
+  done
+  sd_pushbutton_draw $1
+  return $sd_retval
+}
+
+
+sd_pushbutton_draw ()  {  # $1=name [$2=selection]
+  local sd_x= sd_y= sd_caption= sd_capt2=
+  local sd_color= sd_colorl= sd_colorb=
+
+  if test "$2" = selection; then
+    sd_color=`tput sgr0; tput setaf 3; tput bold; tput setab 4`
+    sd_colorl=`tput sgr0; tput setaf 7; tput bold; tput setab 4`
+    sd_colorb=` tput sgr0; tput setaf 7; tput bold; tput setab 4`
+  else
+    sd_color=`tput sgr0; tput setaf 0; tput bold; tput setab 7`
+    sd_colorl=`tput sgr0; tput setaf 1; tput setab 7`
+    sd_colorb=`tput sgr0; tput setaf 0; tput setab 7`
+  fi
+
+  eval sd_x=\${sd_${1}_x:-0}
+  eval sd_y=\${sd_${1}_y:-0}
+  eval sd_caption=\"\$sd_${1}_caption\"
+  sd_capt2="${sd_caption//[^[:alnum:]]/}"
+
+  tput cup $sd_y $sd_x
+  echo -en "$sd_colorb"
+  echo -n "<"
+  echo -n "$sd_color"
+  echo -n "${sd_caption%%[[:alnum:]]*}"
+  echo -n "$sd_colorl"
+  echo -n "${sd_capt2:0:1}"
+  echo -n "$sd_color"
+  echo -n "${sd_caption#*[[:alnum:]]}"
+  echo -n "$sd_colorb"
+  echo -n ">"
+  tput cup $sd_y $((sd_x + 1))
+  echo -n "$sd_color"
+  echo -n "${sd_caption%%[[:alnum:]]*}"
+}
+
+
+sd_inputbox_read ()  {  # $1=name
+  local sd_varname= sd_maxwidth= sd_c= sd_retval=
+
+  eval sd_varname=\$sd_${1}_varname
+  eval sd_maxwidth=\$sd_${1}_width
+  ((sd_maxwidth--))
+
+  while true; do
+    sd_inputbox_draw $1 selection
+    tput cnorm; read -sn1 sd_c; tput civis
+    sd_c="`sd_escape_parse \"$sd_c\"`"
+ 
+    case "$sd_c" in
+      $'\e')      sd_retval=27;  break ;;
+      $'\ekcuf1') sd_retval=255; break ;;
+      $'\ekcub1') sd_retval=254; break ;;
+      $'\eht')    sd_retval=255; break ;;
+      $'\ekcbt')    sd_retval=254; break ;;
+      $'\ekbs') 
+        eval "$sd_varname=\"\${${sd_varname}%\${${sd_varname}: -1}}\"" 
+	;; 
+      $'\e'*) : ;;
+      *) eval test \${#$sd_varname} -lt $sd_maxwidth && eval "$sd_varname+=\"\$sd_c\"" ;;
+    esac
+  done
+  sd_inputbox_draw $1
+  return $sd_retval
+}
+
+
+sd_inputbox_draw ()  {  # $1=name, [$2=selection]
+  local sd_x= sd_y= sd_width= sd_varname=
+  local sd_varin= sd_varout=
+  local sd_password=
+
+  eval sd_x=\${sd_${1}_x:-0}
+  eval sd_y=\${sd_${1}_y:-0}
+  eval sd_width=\${sd_${1}_width:-0}
+  eval sd_varname=\${sd_${1}_varname:-sd_novarname}
+  eval sd_password=\${sd_${1}_password:-no}
+
+  if test "$2" = selection; then
+    tput sgr0; tput setaf 7; tput setab 4;
+  else
+    tput sgr0; tput setaf 0; tput setab 7;
+  fi
+
+  eval sd_varin=\${#${sd_varname}}
+  eval sd_varout=$(( sd_width - sd_varin ))
+  tput cup $sd_y $sd_x
+  if test $sd_password = yes; then
+    sd_repeat ${sd_varin} "*"
+  else
+    eval echo -n \$$sd_varname
+  fi
+  printf "%${sd_varout}s"
+  eval tput cup $sd_y \$\(\(sd_x+\${#$sd_varname}\)\)
+}
+
+
+sd_listbox_read ()  {  # $1=name
+  local sd_arrayname= sd_indexname= 
+  local sd_maxindex= sd_ilight= sd_ifirst= sd_height= sd_multi=
+  local sd_exilight= sd_c= sd_retval= sd_text= sd_i=
+
+  eval sd_arrayname=\${sd_${1}_arrayname:-sd_noarray}
+  eval sd_indexname=\${sd_${1}_indexname:-sd_noindex}
+  eval sd_maxindex=\${#$sd_arrayname[@]}
+  eval sd_height=\${sd_${1}_height:-1}
+  eval sd_multi=\${sd_${1}_multi:-no}
+  eval sd_ilight=\${sd_${1}_ilight:-0}
+  eval sd_ifirst=\${sd_${1}_ifirst:-0}
+  eval sd_exilight=-1
+
+  while true; do
+    if test $sd_ilight != $sd_exilight; then
+      sd_exilight=$sd_ilight
+      sd_listbox_draw $1
+    fi
+
+    tput cnorm; read -sn1 sd_c; tput civis
+    sd_c="`sd_escape_parse \"$sd_c\"`"
+
+    case "$sd_c" in
+      $'\e')      sd_retval=27;  break ;;
+      $'\ekcuf1') sd_retval=255; break ;;
+      $'\ekcub1') sd_retval=254; break ;;
+      $'\eht')    sd_retval=255; break ;;
+      $'\ekcbt')    sd_retval=254; break ;;
+      $'\ekcuu1') ((sd_ilight--)) ;;
+      $'\ekcud1') ((sd_ilight++)) ;;
+      $'\ekpp') test $sd_ilight = $sd_ifirst && \
+                sd_ilight=$((sd_ilight - sd_height)) || \
+                sd_ilight=$sd_ifirst ;;
+      $'\eknp') test $sd_ilight = $((sd_ifirst + sd_height - 1)) && \
+                sd_ilight=$((sd_ilight + sd_height)) || \
+                sd_ilight=$((sd_ifirst + sd_height - 1)) ;;
+      $'\ekhome') sd_ilight=0 ;;
+      $'\ekend') sd_ilight=$((sd_maxindex - 1)) ;;
+      " ")  if test $sd_multi = no; then
+              for ((sd_i=0; sd_i < sd_maxindex; sd_i++)); do 
+	        eval unset $sd_indexname[$sd_i]
+	      done
+              eval $sd_indexname[$sd_ilight]=\"\${$sd_arrayname[$sd_ilight]}\"
+            else
+	      eval sd_text=\${$sd_indexname[$sd_ilight]+set}
+              eval unset $sd_indexname[$sd_ilight]
+              test "$sd_text" = "set" || \
+                eval $sd_indexname[$sd_ilight]=\"\${$sd_arrayname[$sd_ilight]}\"
+            fi
+	    sd_exilight=-1 ;;
+      *) shopt -s nocasematch
+         sd_i=$((sd_ilight + 1))
+         while test $sd_i != $sd_ilight; do
+           eval [[ \"\${$sd_arrayname[$sd_i]::1}\" = "$sd_c" ]] && break
+	   ((sd_i++))
+	   test $sd_i -ge $sd_maxindex && sd_i=0
+	 done
+	 sd_ilight=$sd_i
+	 shopt -u nocasematch ;;
+    esac
+    test $sd_ilight -lt 0 && sd_ilight=0
+    test $sd_ilight -ge $sd_maxindex && sd_ilight=$((sd_maxindex - 1))
+    test $sd_ilight -lt $sd_ifirst && sd_ifirst=$sd_ilight
+    test $sd_ilight -ge $((sd_ifirst + sd_height)) && sd_ifirst=$((sd_ilight - sd_height + 1))
+
+    eval sd_${1}_ilight=$sd_ilight
+    eval sd_${1}_ifirst=$sd_ifirst
+  done
+  return $sd_retval
+}
+
+
+#
+# unset indexname[n] means not-selected
+# any other strings ("" too) means selected
+#
+# with mark=no you can get selection from "ilight"
+#
+sd_listbox_draw ()  {  # $1=name [$2=selection]
+  local sd_x= sd_y= sd_width= sd_height=
+  local sd_arrayname= sd_indexname=
+  local sd_mark= sd_multi= sd_ilight= sd_ifirst=
+  local sd_xrest= sd_y2= sd_taby2= sd_text= sd_text2= sd_maxindex=
+  local sd_color= sd_colorl= sd_colorb= sd_scolor= sd_scolorl= sd_scolorb=
+
+  sd_color=`tput sgr0; tput setaf 4; tput bold; tput setab 7`
+  sd_colorl=`tput sgr0; tput setaf 1; tput setab 7`
+  sd_colorb=`tput sgr0; tput setaf 0; tput setab 7`
+  sd_scolor=`tput sgr0; tput setaf 3; tput bold; tput setab 4`
+  sd_scolorl=`tput sgr0; tput setaf 1; tput bold; tput setab 4`
+  sd_scolorb=`tput sgr0; tput setaf 7; tput bold; tput setab 4`
+
+  eval sd_x=\${sd_${1}_x:0}
+  eval sd_y=\${sd_${1}_y:0}
+  eval sd_width=\${sd_${1}_width:-4}
+  eval sd_height=\${sd_${1}_height:-1}
+  eval sd_mark=\${sd_${1}_mark:-no}
+  eval sd_ilight=\${sd_${1}_ilight:-0}
+  eval sd_ifirst=\${sd_${1}_ifirst:-0}
+  eval sd_arrayname=\${sd_${1}_arrayname:-sd_noarray}
+  eval sd_indexname=\${sd_${1}_indexname:-sd_noindex}
+
+  if test $sd_mark != no; then
+    test $sd_width -lt 4 && sd_width=0 || ((sd_width -= 4))
+  fi
+  eval sd_maxindex=\${#$sd_arrayname[@]}
+  for ((sd_y2=0, sd_taby2=sd_ifirst; \
+        sd_y2 < sd_height & sd_taby2 < sd_maxindex; \
+	sd_y2++, sd_taby2++)); do
+
+    tput cup $(( sd_y + sd_y2)) $sd_x
+
+    if test $sd_mark != no; then
+      test $sd_ilight = $sd_taby2 && echo -n "$sd_scolorb" || echo -n "$sd_colorb"
+      test $sd_mark = radio && echo -n "(" || echo -n "["
+      eval test \"\${$sd_indexname[$sd_taby2]+set}\" = set && echo -n "*" || echo -n " "
+      test $sd_mark = radio && echo -n ")" || echo -n "]"
+      echo -n "$sd_color"
+      echo -n " "
+    fi
+
+    eval sd_text=\"\${$sd_arrayname[$sd_taby2]}\"
+    sd_text="${sd_text::$sd_width}"
+    sd_xrest=$(( sd_width - ${#sd_text} ))
+    test $sd_ilight = $sd_taby2 && echo -n "$sd_scolorl" || echo -n "$sd_colorl"
+    echo -n ${sd_text::1}
+    test $sd_ilight = $sd_taby2 && echo -n "$sd_scolor" || echo -n "$sd_color"
+    echo -n ${sd_text:1}
+    echo -n "$sd_color"
+    printf "%-${sd_xrest}s"
+  done
+  test $sd_mark = no || ((sd_x += 4))
+  test $((sd_ilight - sd_ifirst)) -lt $sd_height && \
+    tput cup $((sd_y + sd_ilight - sd_ifirst)) $((sd_x))
+}
+
+
+#
+# secondary functions
+#
+
+
+sd_swap () {  # $1=varname1 $2=varname2
+  local sd_temp=
+
+  eval sd_temp=\"\$$1\"
+  eval $1=\"\$$2\"
+  eval $2=\"\$sd_temp\"
+}
+
+
+sd_repeat ()  {  # $1=times $2=char
+  local sd_i=
+  for (( sd_i=0; sd_i < $1; sd_i++ )); do echo -n "$2"; done
+  return 0
+}
+
+
+#
+# cuu, cud, cur, cul, tab, back, del...
+# every special keys will start with \e
+#
+sd_escape_parse ()  {  # $1=char
+  local sd_escseq=( "`tput kcuu1`" \
+                    "`tput kcud1`" \
+		    "`tput kcuf1`" \
+		    "`tput kcub1`" \
+		    "`tput ht`" \
+		    "`tput kcbt`" \
+		    "`tput kbs`" \
+		    "`tput kpp`" \
+		    "`tput knp`" \
+		    "`tput khome`" \
+		    "`tput kend`" ) 
+  
+  local sd_outseq=( $'\ekcuu1' \
+                    $'\ekcud1' \
+		    $'\ekcuf1' \
+		    $'\ekcub1' \
+		    $'\eht' \
+		    $'\ekcbt' \
+		    $'\ekbs' \
+		    $'\ekpp' \
+		    $'\eknp' \
+		    $'\ekhome' \
+		    $'\ekend' )
+
+  local sd_i=0 sd_i2=1 sd_seq="$1" sd_c2=
+
+  while test $sd_i -lt "${#sd_escseq[@]}"; do
+    if test "$sd_seq" = "${sd_escseq[$sd_i]::$sd_i2}"; then
+      test ${#sd_escseq[$sd_i]} = $sd_i2 && { echo -n "${sd_outseq[$sd_i]}"; return; }
+      read -sn1 -t1 sd_c2 || break
+      sd_seq+="$sd_c2"
+      ((sd_i=0, sd_i2++))
+    else
+      ((sd_i++))
+    fi
+  done
+  echo -n "${sd_seq: -1}"
+}
+
+
+sd_get_acsc_jklmqx ()  {
+  local sd_jklmqx= sd_acsc= sd_i=
+
+  sd_acsc="`tput acsc`"
+  test "$sd_acsc" || { echo "',,'-|"; return; }
+  
+  for (( sd_i=0; sd_i < ${#sd_acsc}; sd_i+=2 )); do
+    case ${sd_acsc:$sd_i:1} in
+      j|k|l|m|q|x) sd_jklmqx+="${sd_acsc:$((sd_i+1)):1}"$'\n' ;;
+    esac
+  done
+  echo "$sd_jklmqx"
+}
+

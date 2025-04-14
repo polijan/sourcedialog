@@ -1,0 +1,78 @@
+#!/bin/bash
+
+. ../sourcedialog
+
+array_best=( "Linus Torvalds" \
+             "Richard Stallman" \
+	     "Mahatma Gandhi" \
+	     "John Lennon" \
+	     "Jesus Christ" )
+index_best[0]=${array_best[0]}
+index_best[1]=${array_best[1]}
+index_best[4]=${array_best[4]}
+
+
+array_worst=( "Adolf Hitler" \
+              "Iosif Stalin" \
+	      "Augusto Pinochet" \
+	      "Silvio Berlusconi" \
+	      "Saddam Hussein" )
+index_worst[3]=${array_worst[3]}
+
+
+array_quote=( "The best is the enemy of the good" \
+	      "To hold a pen is to be at war" \
+              "Love truth but pardon error" \
+	      "A witty saying proves nothing" \
+	      "Business is the salt of life" )
+
+
+sd_load_canvas  name=cv1 x=17 y=1  width=40 height=21 caption="EXAMPLE 4"
+sd_load_textbox name=tbb x=19 y=2  width=36 text="Choose the best"
+sd_load_textbox name=tbw x=19 y=8  width=36 text="Choose the worst"
+sd_load_textbox name=tbq x=19 y=14 width=36 text="Choose your quote"
+
+
+# "arrayname" sets the 'name' of the array filled with the elements of the list
+#
+# "indexname" sets the 'name' of the array filled with the elements selected
+# unset-element means not-selected, any string ("" too) means selected
+# sourcedialog will fill this array unsetting non-selected elements
+# and setting every selected element with the same string found in "arrayname"
+
+sd_load_checklist name=listbest  x=19 y=4  width=36 height=3 \
+                  arrayname=array_best indexname=index_best
+sd_load_radiolist name=listworst x=19 y=10 width=36 height=3 \
+                  arrayname=array_worst indexname=index_worst
+
+
+# "ilight" sets the first element highlighted (default 0)
+# "ifirst" sets the first element showed (default 0)
+# in this way you can change the starting point of the list
+
+sd_load_menubox name=menuquote x=19 y=16 width=36 height=3 \
+                arrayname=array_quote ifirst=1 ilight=2
+
+
+sd_load_pushbutton name=button1 x=33 y=20 caption="  OK  "
+
+
+# you can read "ilight" property to get the last selection in menuboxes
+
+sd_button1_push () { lastsel=$sd_menuquote_ilight; return 0; }
+
+
+sd_start; retval=$?
+clear
+case $retval in
+  27) echo "ESC pressed." ;;
+  0)
+    echo "BEST SELECTION"
+    echo "--------------"
+    for name in "${index_best[@]}"; do echo "$name"; done
+
+    echo
+    echo "YOUR QUOTE IS: ${array_quote[$lastsel]}"
+    ;;
+esac
+

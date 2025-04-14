@@ -1,0 +1,65 @@
+#!/bin/bash
+
+. ../sourcedialog
+
+firstname=
+lastname=
+street=
+city=
+state=
+zip=
+country=
+phone1=
+phone2=
+phone3=
+ext=
+mail=
+
+
+sd_load_canvas     name=cvmain     x=4  y=1  width=70 height=21
+sd_load_textbox    name=tbtop      x=28 y=2  text="Tell us about yourself"
+sd_load_textbox    name=tbfirst    x=6  y=4  text="First Name:"
+sd_load_inputbox   name=ibfirst    x=18 y=4  width=54 varname=firstname
+sd_load_textbox    name=tblast     x=6  y=6  text="Last Name:" 
+sd_load_inputbox   name=iblast     x=17 y=6  width=55 varname=lastname
+sd_load_textbox    name=tbstreet   x=6  y=8  text="Street address:"
+sd_load_inputbox   name=ibstreet   x=22 y=8  width=50 varname=street
+sd_load_textbox    name=tbcity     x=6  y=10 text="City:"
+sd_load_inputbox   name=ibcity     x=12 y=10 width=60 varname=city
+sd_load_textbox    name=tbstate    x=6  y=12 text="State Province:"
+sd_load_inputbox   name=ibstate    x=22 y=12 width=15 varname=state
+sd_load_textbox    name=tbzip      x=39 y=12 text="ZIP / Postal code:"
+sd_load_inputbox   name=ibzip      x=58 y=12 width=14 varname=zip
+sd_load_textbox    name=tbcountry  x=6  y=14 text="Country:"
+sd_load_inputbox   name=ibcountry  x=15 y=14 width=57 varname=country
+sd_load_textbox    name=tbphone    x=6  y=16 text="Telephone number:"
+sd_load_inputbox   name=ibphone1   x=24 y=16 width=10 varname=phone1
+sd_load_textbox    name=tbdash1    x=35 y=16 text="-"
+sd_load_inputbox   name=ibphone2   x=37 y=16 width=10 varname=phone2
+sd_load_textbox    name=tbdash2    x=48 y=16 text="-"
+sd_load_inputbox   name=ibphone3   x=50 y=16 width=10 varname=phone3
+sd_load_textbox    name=tbext      x=61 y=16 text="ext.:"
+sd_load_inputbox   name=ibext      x=67 y=16 width=5 varname=ext
+sd_load_textbox    name=tbmail     x=6  y=18 text="Email address:"
+sd_load_inputbox   name=ibmail     x=21 y=18 width=51 varname=mail
+sd_load_pushbutton name=pbregister x=34 y=20 caption=" Register "
+
+sd_pbregister_push () { return 0; }
+
+
+sd_start; retval=$?
+clear
+if test $retval = 27; then
+  echo ESC pressed.
+else
+  echo "First name: $firstname" 
+  echo "Last name: $lastname"
+  echo "Street address: $street"
+  echo "City: $city"
+  echo "State: $state"
+  echo "ZIP: $zip"
+  echo "Country: $country"
+  echo "Phone: ${phone1}-${phone2}-${phone3} ext.:$ext"
+  echo "Email: $mail"
+fi
+

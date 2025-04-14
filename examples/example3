@@ -1,0 +1,97 @@
+#!/bin/bash
+
+. ../sourcedialog
+
+array_loc=( --- \
+            Afghanistan \
+            Albania \
+	    Algeria \
+	    "American Samoa" \
+	    Andorra \
+	    Angola \
+	    Anguilla \
+	    Antarctica \
+	    "Atigua and Barbuda" \
+	    Argentina \
+	    Armenia \
+	    Aruba \
+	    Australia \
+	    Austria \
+	    Azerbijan \
+	    Zambia \
+	    Zimbabwe )
+
+array_month=( --- \
+              January \
+	      February \
+	      March \
+	      April \
+	      May \
+	      June \
+              July \
+	      August \
+	      September \
+	      October \
+	      November \
+	      December )
+
+array_day=( -- 0{1..9} {10..31} )
+eval array_year=( --- {1901..`date +%Y`} )
+array_gender=( Male Female )
+array_opts=( "Let others find my channel if they have my email address" \
+             "I agree to the Terms of Use and Privacy Policy." ) 
+index_opts[0]=${array_opts[0]}
+password=
+repassword=
+
+
+sd_load_canvas      name=cvmain       x=4  y=1  width=70 height=21 \
+                    caption=" CREATE YOUR ACCOUNT "
+sd_load_textbox     name=tbmail       x=9  y=3  text="Email Address: "
+sd_load_inputbox    name=ibmail       x=24 y=3  width=45 varname=mail
+sd_load_textbox     name=tbpassword   x=14 y=4  text="Password: "
+sd_load_passwordbox name=pbpassword   x=24 y=4  width=45 varname=password
+sd_load_textbox     name=tbrepassword x=6  y=5  text="Re-type Password: "
+sd_load_passwordbox name=pbrepassword x=24 y=5  width=45 varname=repassword
+sd_load_textbox     name=tbuser       x=14 y=6  text="Username: "
+sd_load_inputbox    name=ibuser       x=24 y=6  width=45 varname=username
+sd_load_textbox     name=tblocation   x=13 y=8  text="Location: "
+sd_load_frame       name=frlocation   x=24 y=7  width=45 height=3
+sd_load_menubox     name=mblocation   x=25 y=8  width=43 arrayname=array_loc
+sd_load_textbox     name=tbdate       x=8  y=11 text="Date of Birth: "
+sd_load_frame       name=frmonth      x=24 y=10 width=11 height=3
+sd_load_menubox     name=mbmonth      x=25 y=11 width=9  arrayname=array_month
+sd_load_frame       name=frday        x=35 y=10 width=4  height=3
+sd_load_menubox     name=mbday        x=36 y=11 width=2  arrayname=array_day
+sd_load_frame       name=fryear       x=39 y=10 width=6  height=3
+sd_load_menubox     name=mbyear       x=40 y=11 width=4  arrayname=array_year
+sd_load_textbox     name=tbgender     x=15 y=13 text="Gender: "
+sd_load_radiolist   name=rlgender     x=24 y=13 width=10 height=2 \
+                    arrayname=array_gender indexname=index_gender
+sd_load_checklist   name=clopts       x=8  y=16 width=65 height=2 \
+                    arrayname=array_opts indexname=index_opts
+sd_load_pushbutton  name=pbcreate     x=30 y=20 caption="Create my account"
+
+
+sd_pbcreate_push () { 
+  ilocation=$sd_mblocation_ilight
+  imonth=$sd_mbmonth_ilight
+  iday=$sd_mbday_ilight
+  iyear=$sd_mbday_ilight
+  return 0; 
+}
+
+
+sd_start; retval=$?
+clear
+if test $retval = 27; then
+  echo ESC pressed.
+else
+  echo Email: $mail
+  echo Password: $password - $repassword
+  echo Usernane: $username
+  echo Location: ${array_loc[$ilocation]}
+  echo Date: ${array_month[$imonth]}-${array_day[$iday]}-${array_year[$iyear]}
+  echo Gender: ${index_gender[*]}
+  for opt in "${index_opts[@]}"; do echo $opt; done
+fi

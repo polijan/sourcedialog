@@ -1,0 +1,42 @@
+#!/bin/bash
+
+. ../sourcedialog
+
+sd_load_canvas  name=canvas1  x=14  y=6  width=50 height=12 caption="EXAMPLE 4"
+sd_load_textbox name=textbox1 x=18  y=9  width=5  text="Name:"
+sd_load_textbox name=textbox2 x=18  y=11 width=8  text="Surname:"
+sd_load_textbox name=textbox3 x=18  y=13 width=9  text="Password:"
+
+
+# "varname" inputbox property sets the 'name' of the user-variable
+# This variable will be automatically managed by sourcedialog
+# Pre-put something in this variable to start with a default value
+#
+# passwordbox works like inputbox, but hiding text with *
+
+name="Richard"
+sd_load_inputbox name=ibname     x=28 y=9 width=20 varname=name
+
+surname="Stallman"
+sd_load_inputbox name=ibsurname  x=28 y=11 width=20 varname=surname
+
+password="freebeer"
+sd_load_passwordbox name=ibpassword x=28 y=13 width=20 varname=password
+
+
+sd_load_pushbutton name=button1 x=35 y=16 caption="  OK  "
+sd_button1_push () { return 0; }
+
+
+sd_start; retval=$?
+clear
+case $retval in
+  27) echo "Esc pressed." ;;
+  0)
+    echo
+    echo "The name is: $name"
+    echo "The surname is: $surname"
+    echo "The password is: $password"
+    ;;
+esac
+

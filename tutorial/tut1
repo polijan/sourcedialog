@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# First of all, you have to include 'sourcedialog' in your script.
+# You can include it using 'source ' bash builtin.
+
+source ../sourcedialog
+
+
+# Next, you have to load your objects
+#
+# For every object you have to set his name (name=<name>) and his properties 
+#
+# Properties for canvas     : x, y, width, height, caption
+# Properties for frame      : x, y, width, height
+# Properties for textbox    : x, y, width, height, text
+# Properties for pushbutton : x, y, caption
+# Properties for inputbox   : x, y, width, varname
+# Properties for menubox    : x, y, width, height, arrayname, [ilight, ifirst]
+# Properties for checklist  : x, y, width, height, arrayname, indexname
+# Properties for radiolist  : x, y, width, height, arrayname, indexname 
+
+sd_load_canvas     name=mycanvas  x=20 y=5  width=40 height=10 caption="EXAMPLE 1"
+sd_load_frame      name=myframe   x=23 y=7  width=34 height=5
+sd_load_textbox    name=mytext    x=25 y=8  width=30 height=3 text="Once a man has tasted freedom he will never be content to be a slave."
+sd_load_pushbutton name=mybutton1 x=30 y=13 caption="  OK  "
+sd_load_pushbutton name=mybutton2 x=42 y=13 caption="Cancel"
+
+
+# Detect the "push event" of your pushbuttons and return a value
+# The value must be in the range 0-26, and will be the return value of sd_start
+
+sd_mybutton1_push () { return 0; }
+sd_mybutton2_push () { return 1; }
+
+
+# Finally, simply call sd_start, and save his return value
+#
+# Walk through objects using right-left arrows and tab key
+# When finished press Enter in a pushbutton
+
+sd_start; retval=$?
+
+
+# 27 is the return value of Esc key
+# The other values are those returned from sd_<buttonname>_push functions
+
+clear
+case $retval in
+  27) echo "Esc pressed." ;;
+  0)  echo "OK pressed." ;;
+  1)  echo "Cancel pressed." ;;
+esac
+
